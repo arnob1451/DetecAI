@@ -25,6 +25,8 @@ MODEL_PATH = "yolov8n.pt"
 MAX_IMAGE_SIZE = 800
 EDGE_METHODS = ["Canny", "Sobel", "Laplacian"]  # Removed Scharr
 DEFAULT_CLASSES_TO_SHOW = 3
+  
+
 
 # Suppress warnings
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -69,6 +71,8 @@ def apply_theme(high_contrast):
             """,
             unsafe_allow_html=True
         )
+     
+      
 
 # ======================
 # HELPER FUNCTIONS
@@ -123,6 +127,7 @@ def preprocess_image(image: Image.Image) -> tuple:
         return img_gray, img_rgb
     except Exception as e:
         raise RuntimeError(f"Image processing failed: {str(e)}")
+
 
 def apply_preprocessing(image: np.ndarray, params: dict) -> np.ndarray:
     """Apply preprocessing steps to the image"""
@@ -280,6 +285,7 @@ def main():
             elif edge_method == "Laplacian":
                 edge_params['laplacian_kernel'] = st.slider("Laplacian Kernel", 3, 15, 3, step=2, key="laplacian_kernel")
 
+
         # Preprocessing options
         with st.expander("Preprocessing Options", expanded=True):
             preprocess_params = {
@@ -389,6 +395,7 @@ def main():
                 count_df = pd.DataFrame(list(counts.items()), columns=["Object Name", "Count"])
                 st.dataframe(count_df, use_container_width=True)
 
+
             if yolo_enabled and detections:
                 json_data = json.dumps(detections, indent=2)
                 st.download_button(
@@ -398,6 +405,8 @@ def main():
                     mime="application/json",
                     key="download_json"
                 )
+
+
 
     st.markdown("---")
     st.markdown("*Built by team fantastic four using Streamlit, OpenCV, and YOLOv8*")
