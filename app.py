@@ -31,13 +31,12 @@ import pandas as pd
 # Rest of your code...
 
 # Set page configuration as the first Streamlit command
-st.set_page_config(page_title="Objectify-Smart Object & Edge Detection App", layout="wide")
+st.set_page_config(page_title="DectecAI-Smart Object & Edge Detection App", layout="wide")
 
 # ======================
 # CONFIGURATION
 # ======================
 MODEL_PATH = "yolov8n.pt"
-CACHE_DIR = os.path.expanduser("~/.cache/ultralytics")
 MAX_IMAGE_SIZE = 800
 EDGE_METHODS = ["Canny", "Sobel", "Laplacian"]  # Removed Scharr
 DEFAULT_CLASSES_TO_SHOW = 3
@@ -53,14 +52,14 @@ def apply_theme(high_contrast):
         st.markdown(
             """
             <style>
-            .main {background-color: #FFFFFF; padding: 20px;}
-            .stImage > img {max-width: 100%; height: auto; border: 2px solid #000000; border-radius: 5px;}
+             .stImage > img {max-width: 100%; height: auto; border: 2px solid #000000; border-radius: 5px;}
             .stSidebar {background-color: #FFFFFF; border-right: 2px solid #000000;}
             .stExpander {background-color: #FFFFFF; border: 2px solid #000000; border-radius: 5px;}
             h1, h2, h3, p, div, label, span {color: #000000 !important;}
             .stButton>button {background-color: #000000; color: #FFFFFF; border-radius: 5px; border: 2px solid #000000;}
             .stButton>button:hover {background-color: #333333;}
             .stDataFrame {background-color: #FFFFFF; border: 2px solid #000000; border-radius: 5px;}
+            .main {background-color: #FFFFFF; padding: 20px;}
             .stSelectbox > div, .stMultiSelect > div, .stCheckbox > label, .stSlider > label {color: #000000 !important;}
             .stDataFrame table, .stDataFrame th, .stDataFrame td {color: #000000 !important; border-color: #000000;}
             </style>
@@ -89,6 +88,20 @@ def apply_theme(high_contrast):
 # ======================
 # HELPER FUNCTIONS
 # ======================
+
+def adjust_image_properties(image, brightness=100, contrast=100, saturation=100):
+    """Adjust image brightness, contrast, and saturation"""
+    img = np.array(image)
+    if brightness != 100:
+        img = cv2.convertScaleAbs(img, alpha=brightness/100)
+    if contrast != 100:
+        img = cv2.convertScaleAbs(img, alpha=contrast/100)
+    if saturation != 100 and len(img.shape) == 3:
+        hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+        hsv[..., 1] = np.clip(hsv[..., 1] * (saturation/100), 0, 255)
+        img = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+    return Image.fromarray(img)
+
 @st.cache_resource
 def load_yolo_model():
     """Load YOLOv8 model with cache management and error handling"""
@@ -103,19 +116,6 @@ def load_yolo_model():
         return YOLO(MODEL_PATH)
     except Exception as e:
         raise RuntimeError(f"Model loading failed: {str(e)}. Ensure internet connection and update ultralytics/torch.")
-
-def adjust_image_properties(image, brightness=100, contrast=100, saturation=100):
-    """Adjust image brightness, contrast, and saturation"""
-    img = np.array(image)
-    if brightness != 100:
-        img = cv2.convertScaleAbs(img, alpha=brightness/100)
-    if contrast != 100:
-        img = cv2.convertScaleAbs(img, alpha=contrast/100, beta=0)
-    if saturation != 100 and len(img.shape) == 3:
-        hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-        hsv[..., 1] = np.clip(hsv[..., 1] * (saturation/100), 0, 255)
-        img = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
-    return Image.fromarray(img)
 
 def preprocess_image(image: Image.Image) -> tuple:
     """Process uploaded image and return grayscale and RGB versions"""
@@ -225,7 +225,7 @@ def generate_heatmap(edges: np.ndarray) -> np.ndarray:
 # STREAMLIT UI
 # ======================
 def main():
-    st.title("Objectify-Smart object and edge detection application")
+    st.title("DetecAI-Smart object and edge detection application")
     
     # High Contrast Mode Toggle
     high_contrast = st.sidebar.checkbox("High Contrast Mode", value=False)
@@ -261,22 +261,20 @@ def main():
                 img = Image.open(webcam_img)
 
         if not img:
-            st.markdown("*Built by Arnob Bokshi. Upload an image or use webcam to begin processing.*")
+            st.markdown("*Built by Team fantastic four. Upload an image or use webcam to begin processing.*")
             return
-
-    # Image Adjustments
-    with st.sidebar.expander("Image Adjustments", expanded=True):
-        brightness = st.slider("Brightness", 0, 200, 100)
-        contrast = st.slider("Contrast", 0, 200, 100)
-        saturation = st.slider("Saturation", 0, 200, 100)
-        adjusted_img = adjust_image_properties(img, brightness, contrast, saturation)
-
     # Image preprocessing
     try:
         img_gray, img_rgb = preprocess_image(adjusted_img)
     except Exception as e:
         st.error(f"Image processing error: {str(e)}")
         st.stop()
+
+    with st.sidebar.expander("Image Adjustments", expanded=True):
+        brightness = st.slider("Brightness", 0, 200, 100)
+        contrast = st.slider("Contrast", 0, 200, 100)
+        saturation = st.slider("Saturation", 0, 200, 100)
+        adjusted_img = adjust_image_properties(img, brightness, contrast, saturation)
 
     # ======================
     # CONTROL PANEL
@@ -303,8 +301,6 @@ def main():
                 'gaussian': st.checkbox("Gaussian Blur", True, key="gaussian"),
                 'gaussian_kernel': st.slider("Gaussian Kernel", 3, 15, 5, step=2, key="gaussian_kernel"),
                 'threshold': st.checkbox("Adaptive Thresholding", key="threshold"),
-                'hist_eq': st.checkbox("Histogram Equalization", key="hist_eq"),
-                'morph': st.checkbox("Morphological Operations", key="morph"),
                 'morph_kernel': st.slider("Morph Kernel", 3, 15, 3, step=2, key="morph_kernel")
             }
 
@@ -383,16 +379,6 @@ def main():
                 st.image(Image.fromarray(yolo_image), caption="YOLO Object Detection", use_container_width=True)
             st.image(Image.fromarray(heatmap), caption="Edge Intensity Heatmap", use_container_width=True)
 
-        # Detection analytics
-        if yolo_enabled and detections:
-            with st.expander("Detection Analytics", expanded=True):
-                st.subheader("Detected Objects")
-                st.dataframe(pd.DataFrame(detections), use_container_width=True)
-                
-                st.subheader("Object Counts")
-                count_df = pd.DataFrame(list(counts.items()), columns=["Object Name", "Count"])
-                st.dataframe(count_df, use_container_width=True)
-
         # Download options
         with st.expander("Download Options", expanded=False):
             buf = io.BytesIO()
@@ -408,6 +394,16 @@ def main():
                 key="download_image"
             )
             
+        # Detection analytics
+        if yolo_enabled and detections:
+            with st.expander("Detection Analytics", expanded=True):
+                st.subheader("Detected Objects")
+                st.dataframe(pd.DataFrame(detections), use_container_width=True)
+                
+                st.subheader("Object Counts")
+                count_df = pd.DataFrame(list(counts.items()), columns=["Object Name", "Count"])
+                st.dataframe(count_df, use_container_width=True)
+
             if yolo_enabled and detections:
                 json_data = json.dumps(detections, indent=2)
                 st.download_button(
@@ -419,7 +415,7 @@ def main():
                 )
 
     st.markdown("---")
-    st.markdown("*Built by Arnob Bokshi using Streamlit, OpenCV, and YOLOv8*")
+    st.markdown("*Built by team fantastic four using Streamlit, OpenCV, and YOLOv8*")
 
 if __name__ == "__main__":
     main()
