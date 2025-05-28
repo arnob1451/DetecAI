@@ -1,21 +1,6 @@
 import os
 os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
 os.environ["STREAMLIT_SERVER_ENABLE_STATIC_FILE_WATCHER"] = "false"
-
-# Async fix must come FIRST before any imports
-import asyncio
-import nest_asyncio
-nest_asyncio.apply()
-
-# Torch path workaround BEFORE torch import
-import torch
-try:
-    # Prevent Streamlit from inspecting torch.classes
-    torch.classes.__path__._path = []  # type: ignore 
-except AttributeError:
-    pass
-
-# Now import other packages
 import streamlit as st
 import cv2
 import numpy as np
