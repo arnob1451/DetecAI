@@ -1,5 +1,4 @@
 import os
-from dotenv import load_dotenv
 import streamlit as st
 import cv2
 import numpy as np
@@ -13,9 +12,6 @@ import pandas as pd
 from pathlib import Path
 from config import *
 from utils import logger, log_execution_time, validate_image, cleanup_cache, setup_logging
-
-# Load environment variables
-load_dotenv()
 
 # Setup logging
 setup_logging()
