@@ -23,4 +23,327 @@ setup_logging()
 # Suppress warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
-[... Rest of your existing app.py code ...]
+# Set page configuration as the first Streamlit command
+st.set_page_config(page_title="DetecAI-Smart Object & Edge Detection App", layout="wide")
+
+# Cache directory setup
+CACHE_DIR = Path("cache")
+CACHE_DIR.mkdir(exist_ok=True)
+
+@st.cache_resource
+def load_yolo_model():
+    """Load YOLOv8 model with cache management and error handling"""
+    try:
+        cleanup_cache()  # Clean up expired cache files
+        logger.info("Loading YOLO model...")
+        return YOLO(MODEL_PATH)
+    except Exception as e:
+        logger.error(f"Model loading failed: {str(e)}")
+        raise RuntimeError(f"Model loading failed: {str(e)}")
+
+@log_execution_time
+def adjust_image_properties(image, brightness=100, contrast=100, saturation=100):
+    """Adjust image brightness, contrast, and saturation"""
+    try:
+        img = np.array(image)
+        if brightness != 100:
+            img = cv2.convertScaleAbs(img, alpha=brightness/100)
+        if contrast != 100:
+            img = cv2.convertScaleAbs(img, alpha=contrast/100)
+        if saturation != 100 and len(img.shape) == 3:
+            hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+            hsv[..., 1] = np.clip(hsv[..., 1] * (saturation/100), 0, 255)
+            img = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+        return Image.fromarray(img)
+    except Exception as e:
+        logger.error(f"Image adjustment failed: {str(e)}")
+        raise RuntimeError(f"Image adjustment failed: {str(e)}")
+
+@log_execution_time
+def preprocess_image(image: Image.Image) -> tuple:
+    """Process uploaded image and return grayscale and RGB versions"""
+    try:
+        img_array = np.array(image)
+        
+        if len(img_array.shape) == 3:
+            img_rgb = img_array.copy()
+            img_gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        else:
+            img_gray = img_array
+            img_rgb = cv2.cvtColor(img_array, cv2.COLOR_GRAY2RGB)
+
+        # Resize maintaining aspect ratio
+        scale = MAX_IMAGE_SIZE / max(img_gray.shape)
+        if scale < 1:
+            img_gray = cv2.resize(img_gray, (0, 0), fx=scale, fy=scale)
+            img_rgb = cv2.resize(img_rgb, (0, 0), fx=scale, fy=scale)
+            
+        return img_gray, img_rgb
+    except Exception as e:
+        logger.error(f"Image preprocessing failed: {str(e)}")
+        raise RuntimeError(f"Image preprocessing failed: {str(e)}")
+
+@log_execution_time
+def apply_preprocessing(image: np.ndarray, params: dict) -> np.ndarray:
+    """Apply preprocessing steps to the image"""
+    try:
+        processed = image.copy()
+        if params['gaussian']:
+            processed = cv2.GaussianBlur(processed, 
+                                       (params['gaussian_kernel'], params['gaussian_kernel']), 0)
+        if params.get('threshold', False):
+            processed = cv2.adaptiveThreshold(processed, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                           cv2.THRESH_BINARY, 11, 2)
+        if params.get('hist_eq', False):
+            processed = cv2.equalizeHist(processed)
+        if params.get('morph', False):
+            kernel = np.ones((params['morph_kernel'], params['morph_kernel']), np.uint8)
+            processed = cv2.dilate(processed, kernel, iterations=1)
+        return processed
+    except Exception as e:
+        logger.error(f"Preprocessing failed: {str(e)}")
+        raise RuntimeError(f"Preprocessing failed: {str(e)}")
+
+@log_execution_time
+def apply_edge_detection(method: str, image: np.ndarray, params: dict) -> np.ndarray:
+    """Apply selected edge detection algorithm"""
+    try:
+        if method == "Canny":
+            return cv2.Canny(image, params['threshold1'], params['threshold2'])
+        elif method == "Sobel":
+            sobelx = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=params['kernel_size'])
+            sobely = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=params['kernel_size'])
+            edges = cv2.magnitude(sobelx, sobely)
+        elif method == "Laplacian":
+            edges = cv2.Laplacian(image, cv2.CV_64F, ksize=params['laplacian_kernel'])
+            
+        return cv2.normalize(edges, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+    except Exception as e:
+        logger.error(f"Edge detection failed: {str(e)}")
+        raise RuntimeError(f"Edge detection failed: {str(e)}")
+
+@log_execution_time
+def detect_objects(model, image: np.ndarray, selected_classes: list) -> tuple:
+    """Run YOLO object detection and return results with visualization"""
+    try:
+        start_time = time.time()
+        results = model(image)
+        detections = []
+        counts = {}
+        viz_image = image.copy()
+        
+        for result in results:
+            for box in result.boxes:
+                cls_id = int(box.cls[0])
+                class_name = model.names[cls_id]
+                
+                if selected_classes and class_name not in selected_classes:
+                    continue
+                    
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                conf = float(box.conf[0])
+                
+                cv2.rectangle(viz_image, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                cv2.putText(viz_image, f"{class_name} {conf:.2f}", 
+                           (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+                
+                detections.append({
+                    "class": class_name,
+                    "confidence": conf,
+                    "bbox": [x1, y1, x2, y2]
+                })
+                counts[class_name] = counts.get(class_name, 0) + 1
+                
+        return viz_image, detections, counts, time.time()-start_time
+    except Exception as e:
+        logger.error(f"Object detection failed: {str(e)}")
+        raise RuntimeError(f"Object detection failed: {str(e)}")
+
+@log_execution_time
+def generate_heatmap(edges: np.ndarray) -> np.ndarray:
+    """Generate edge intensity heatmap"""
+    try:
+        return cv2.applyColorMap(edges, cv2.COLORMAP_JET)
+    except Exception as e:
+        logger.error(f"Heatmap generation failed: {str(e)}")
+        raise RuntimeError(f"Heatmap generation failed: {str(e)}")
+
+def apply_theme(high_contrast):
+    """Apply theme based on contrast mode"""
+    if high_contrast:
+        st.markdown("""
+            <style>
+            .stImage > img {max-width: 100%; height: auto; border: 2px solid #000000; border-radius: 5px;}
+            .stSidebar {background-color: #FFFFFF; border-right: 2px solid #000000;}
+            .stExpander {background-color: #FFFFFF; border: 2px solid #000000; border-radius: 5px;}
+            h1, h2, h3, p, div, label, span {color: #000000 !important;}
+            .stButton>button {background-color: #000000; color: #FFFFFF; border-radius: 5px; border: 2px solid #000000;}
+            .stButton>button:hover {background-color: #333333;}
+            .stDataFrame {background-color: #FFFFFF; border: 2px solid #000000; border-radius: 5px;}
+            .main {background-color: #FFFFFF; padding: 20px;}
+            </style>
+            """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+            <style>
+            .main {background-color: #000000; padding: 20px;}
+            .stImage > img {max-width: 100%; height: auto; border: 1px solid #ffffff; border-radius: 5px;}
+            .stSidebar {background-color: #000000;}
+            .stExpander {background-color: #000000; border: 1px solid #ffffff; border-radius: 5px;}
+            h1, h2, h3, p, div, label, span {color: #ffffff !important;}
+            .stButton>button {background-color: #333333; color: #ffffff; border-radius: 5px; border: none;}
+            .stButton>button:hover {background-color: #555555;}
+            .stDataFrame {background-color: #000000; border: 1px solid #ffffff; border-radius: 5px;}
+            </style>
+            """, unsafe_allow_html=True)
+
+def main():
+    try:
+        st.title("DetecAI-Smart Object and Edge Detection Application")
+        
+        # High Contrast Mode Toggle
+        high_contrast = st.sidebar.checkbox("High Contrast Mode", value=False)
+        apply_theme(high_contrast)
+        
+        # Load model
+        try:
+            model = load_yolo_model()
+        except Exception as e:
+            st.error(str(e))
+            st.stop()
+
+        # Input Selection
+        input_method = st.sidebar.radio("Input Method", ["File Upload", "Webcam Capture"])
+        
+        # File upload/webcam capture section
+        with st.container():
+            st.subheader("Image Input")
+            img = None
+            
+            if input_method == "File Upload":
+                uploaded_file = st.file_uploader("Choose an image...", type=SUPPORTED_FORMATS)
+                if uploaded_file:
+                    valid, message = validate_image(uploaded_file)
+                    if valid:
+                        img = Image.open(uploaded_file)
+                    else:
+                        st.error(message)
+                        st.stop()
+            else:
+                webcam_img = st.camera_input("Take a picture...")
+                if webcam_img:
+                    img = Image.open(webcam_img)
+
+            if not img:
+                st.info("Upload an image or use webcam to begin processing.")
+                return
+
+            # Image adjustments
+            with st.sidebar.expander("Image Adjustments", expanded=True):
+                brightness = st.slider("Brightness", 0, 200, 100)
+                contrast = st.slider("Contrast", 0, 200, 100)
+                saturation = st.slider("Saturation", 0, 200, 100)
+                
+            adjusted_img = adjust_image_properties(img, brightness, contrast, saturation)
+            img_gray, img_rgb = preprocess_image(adjusted_img)
+
+            # Processing parameters
+            with st.sidebar:
+                st.header("Processing Parameters")
+                
+                with st.expander("Edge Detection Settings", expanded=True):
+                    edge_method = st.selectbox("Edge Detection Method", EDGE_METHODS)
+                    edge_params = {}
+                    
+                    if edge_method == "Canny":
+                        edge_params['threshold1'] = st.slider("Threshold 1", 0, 500, 100)
+                        edge_params['threshold2'] = st.slider("Threshold 2", 0, 500, 200)
+                    elif edge_method == "Sobel":
+                        edge_params['kernel_size'] = st.slider("Kernel Size", 3, 15, 3, step=2)
+                    elif edge_method == "Laplacian":
+                        edge_params['laplacian_kernel'] = st.slider("Kernel Size", 3, 15, 3, step=2)
+
+                with st.expander("Preprocessing Options", expanded=True):
+                    preprocess_params = {
+                        'gaussian': st.checkbox("Gaussian Blur", True),
+                        'gaussian_kernel': st.slider("Gaussian Kernel", 3, 15, 5, step=2),
+                        'threshold': st.checkbox("Adaptive Thresholding"),
+                        'hist_eq': st.checkbox("Histogram Equalization"),
+                        'morph': st.checkbox("Morphological Operations"),
+                        'morph_kernel': st.slider("Morph Kernel", 3, 15, 3, step=2)
+                    }
+
+                with st.expander("Object Detection Settings", expanded=True):
+                    yolo_enabled = st.checkbox("Enable YOLO Detection", True)
+                    draw_contours = st.checkbox("Draw Edge Contours", True)
+                    if yolo_enabled:
+                        class_options = list(model.names.values())
+                        selected_classes = st.multiselect(
+                            "Filter Classes",
+                            class_options,
+                            default=class_options[:DEFAULT_CLASSES_TO_SHOW]
+                        )
+
+            # Process images
+            processed_img = apply_preprocessing(img_gray, preprocess_params)
+            edges = apply_edge_detection(edge_method, processed_img, edge_params)
+            
+            contour_img = cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
+            if draw_contours:
+                contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                cv2.drawContours(contour_img, contours, -1, (0, 255, 0), 2)
+
+            # Object detection
+            detections = []
+            counts = {}
+            yolo_time = 0
+            if yolo_enabled:
+                yolo_image, detections, counts, yolo_time = detect_objects(model, img_rgb, selected_classes)
+
+            # Generate heatmap
+            heatmap = generate_heatmap(edges)
+
+            # Display results
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.image(adjusted_img, caption="Input Image", use_column_width=True)
+                st.image(processed_img, caption="Preprocessed Image", use_column_width=True)
+            
+            with col2:
+                st.image(contour_img, caption=f"{edge_method} Edges", use_column_width=True)
+                if yolo_enabled:
+                    st.image(yolo_image, caption="Object Detection", use_column_width=True)
+                st.image(heatmap, caption="Edge Heatmap", use_column_width=True)
+
+            # Detection results
+            if yolo_enabled and detections:
+                st.subheader("Detection Results")
+                st.dataframe(pd.DataFrame(detections))
+                
+                # Download options
+                col1, col2 = st.columns(2)
+                with col1:
+                    buf = io.BytesIO()
+                    Image.fromarray(yolo_image).save(buf, format="PNG")
+                    st.download_button(
+                        "Download Processed Image",
+                        buf.getvalue(),
+                        "processed_image.png",
+                        "image/png"
+                    )
+                
+                with col2:
+                    st.download_button(
+                        "Download Detection Results",
+                        json.dumps(detections, indent=2),
+                        "detections.json",
+                        "application/json"
+                    )
+
+    except Exception as e:
+        logger.error(f"Application error: {str(e)}")
+        st.error(f"An error occurred: {str(e)}")
+
+if __name__ == "__main__":
+    main()
