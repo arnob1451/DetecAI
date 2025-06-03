@@ -20,7 +20,6 @@ An advanced computer vision application that combines object detection and edge 
    ```bash
    pip install -r requirements.txt
    ```
-3. Create a `.env` file with required configurations
 
 ## Usage
 
@@ -31,7 +30,7 @@ streamlit run app.py
 
 ## Configuration
 
-The application can be configured using environment variables in `.env`:
+The application can be configured through the config.py file:
 
 - `MODEL_PATH`: Path to YOLOv8 model
 - `MAX_IMAGE_SIZE`: Maximum image dimension
@@ -39,10 +38,9 @@ The application can be configured using environment variables in `.env`:
 
 ## Production Deployment
 
-1. Set environment variables
-2. Configure logging
-3. Ensure cache directory exists and is writable
-4. Use production-ready WSGI server
+1. Configure logging
+2. Ensure cache directory exists and is writable
+3. Use production-ready WSGI server
 
 ## License
 

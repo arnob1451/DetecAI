@@ -5,9 +5,9 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 
 # Environment configs
-MODEL_PATH = os.getenv("MODEL_PATH", "yolov8n.pt")
-MAX_IMAGE_SIZE = int(os.getenv("MAX_IMAGE_SIZE", 800))
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+MODEL_PATH = "yolov8n.pt"
+MAX_IMAGE_SIZE = 800
+LOG_LEVEL = "INFO"
 
 # App configs
 EDGE_METHODS = ["Canny", "Sobel", "Laplacian"]

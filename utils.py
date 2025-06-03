@@ -2,6 +2,7 @@ import logging
 import time
 from functools import wraps
 from pathlib import Path
+from config import CACHE_DIR, CACHE_TIMEOUT, MAX_UPLOAD_SIZE, SUPPORTED_FORMATS
 
 # Configure logging
 logging.basicConfig(
