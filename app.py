@@ -1,14 +1,5 @@
 <<<<<<< HEAD
 =======
-import os
->>>>>>> origin
-import streamlit as st
-import cv2
-import numpy as np
-import json
-import io
-<<<<<<< HEAD
-=======
 import warnings
 import time
 from PIL import Image
@@ -18,10 +9,6 @@ import pandas as pd
 from pathlib import Path
 from config import *
 from utils import logger, log_execution_time, validate_image, cleanup_cache, setup_logging
-
-<<<<<<< HEAD
-# Rest of your code...
-
 # Set page configuration as the first Streamlit command
 st.set_page_config(page_title="DectecAI-Smart Object & Edge Detection App", layout="wide")
 
@@ -36,99 +23,6 @@ warnings.filterwarnings("ignore", category=UserWarning)
 # Set page configuration as the first Streamlit command
 st.set_page_config(page_title="DetecAI-Smart Object & Edge Detection App", layout="wide")
 
-<<<<<<< HEAD
-
-
-
-=======
-# Cache directory setup
-CACHE_DIR = Path("cache")
-CACHE_DIR.mkdir(exist_ok=True)
-
-@st.cache_resource
-def load_yolo_model():
-    """Load YOLOv8 model with cache management and error handling"""
-    try:
-        cleanup_cache()  # Clean up expired cache files
-        logger.info("Loading YOLO model...")
-        return YOLO(MODEL_PATH)
-    except Exception as e:
-        logger.error(f"Model loading failed: {str(e)}")
-        raise RuntimeError(f"Model loading failed: {str(e)}")
->>>>>>> origin
-
-@log_execution_time
-def adjust_image_properties(image, brightness=100, contrast=100, saturation=100):
-    """Adjust image brightness, contrast, and saturation"""
-    try:
-        img = np.array(image)
-        if brightness != 100:
-            img = cv2.convertScaleAbs(img, alpha=brightness/100)
-        if contrast != 100:
-            img = cv2.convertScaleAbs(img, alpha=contrast/100)
-        if saturation != 100 and len(img.shape) == 3:
-            hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-            hsv[..., 1] = np.clip(hsv[..., 1] * (saturation/100), 0, 255)
-            img = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
-        return Image.fromarray(img)
-    except Exception as e:
-        logger.error(f"Image adjustment failed: {str(e)}")
-        raise RuntimeError(f"Image adjustment failed: {str(e)}")
-
-@log_execution_time
-def preprocess_image(image: Image.Image) -> tuple:
-    """Process uploaded image and return grayscale and RGB versions"""
-    try:
-        img_array = np.array(image)
-        
-        if len(img_array.shape) == 3:
-            img_rgb = img_array.copy()
-            img_gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-        else:
-            img_gray = img_array
-            img_rgb = cv2.cvtColor(img_array, cv2.COLOR_GRAY2RGB)
-
-        # Resize maintaining aspect ratio
-        scale = MAX_IMAGE_SIZE / max(img_gray.shape)
-        if scale < 1:
-            img_gray = cv2.resize(img_gray, (0, 0), fx=scale, fy=scale)
-            img_rgb = cv2.resize(img_rgb, (0, 0), fx=scale, fy=scale)
-            
-        return img_gray, img_rgb
-    except Exception as e:
-        logger.error(f"Image preprocessing failed: {str(e)}")
-        raise RuntimeError(f"Image preprocessing failed: {str(e)}")
-
-<<<<<<< HEAD
-
-
-
-
-
-
-
-=======
-@log_execution_time
-def apply_preprocessing(image: np.ndarray, params: dict) -> np.ndarray:
-    """Apply preprocessing steps to the image"""
-    try:
-        processed = image.copy()
-        if params['gaussian']:
-            processed = cv2.GaussianBlur(processed, 
-                                       (params['gaussian_kernel'], params['gaussian_kernel']), 0)
-        if params.get('threshold', False):
-            processed = cv2.adaptiveThreshold(processed, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                           cv2.THRESH_BINARY, 11, 2)
-        if params.get('hist_eq', False):
-            processed = cv2.equalizeHist(processed)
-        if params.get('morph', False):
-            kernel = np.ones((params['morph_kernel'], params['morph_kernel']), np.uint8)
-            processed = cv2.dilate(processed, kernel, iterations=1)
-        return processed
-    except Exception as e:
-        logger.error(f"Preprocessing failed: {str(e)}")
-        raise RuntimeError(f"Preprocessing failed: {str(e)}")
->>>>>>> origin
 
 @log_execution_time
 def apply_edge_detection(method: str, image: np.ndarray, params: dict) -> np.ndarray:
