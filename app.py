@@ -1,31 +1,14 @@
-import os
-os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
-os.environ["STREAMLIT_SERVER_ENABLE_STATIC_FILE_WATCHER"] = "false"
 import streamlit as st
 import cv2
 import numpy as np
 import json
 import io
-import shutil
-import warnings
-import time
-from PIL import Image
-from ultralytics import YOLO
 import pandas as pd
 
 # Rest of your code...
 
 # Set page configuration as the first Streamlit command
 st.set_page_config(page_title="DectecAI-Smart Object & Edge Detection App", layout="wide")
-
-# ======================
-# CONFIGURATION
-# ======================
-MODEL_PATH = "yolov8n.pt"
-MAX_IMAGE_SIZE = 800
-EDGE_METHODS = ["Canny", "Sobel", "Laplacian"]  # Removed Scharr
-DEFAULT_CLASSES_TO_SHOW = 3
-  
 
 
 # Suppress warnings
@@ -74,37 +57,9 @@ def apply_theme(high_contrast):
      
       
 
-# ======================
-# HELPER FUNCTIONS
-# ======================
 
-def adjust_image_properties(image, brightness=100, contrast=100, saturation=100):
-    """Adjust image brightness, contrast, and saturation"""
-    img = np.array(image)
-    if brightness != 100:
-        img = cv2.convertScaleAbs(img, alpha=brightness/100)
-    if contrast != 100:
-        img = cv2.convertScaleAbs(img, alpha=contrast/100)
-    if saturation != 100 and len(img.shape) == 3:
-        hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-        hsv[..., 1] = np.clip(hsv[..., 1] * (saturation/100), 0, 255)
-        img = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
-    return Image.fromarray(img)
 
-@st.cache_resource
-def load_yolo_model():
-    """Load YOLOv8 model with cache management and error handling"""
-    try:
-        if os.path.exists(CACHE_DIR):
-            shutil.rmtree(CACHE_DIR)
-            st.info("Cleared Ultralytics cache for fresh yolov8n.pt download.")
-            
-        if not os.path.exists(MODEL_PATH):
-            st.info("Downloading yolov8n.pt... This may take a moment.")
-            
-        return YOLO(MODEL_PATH)
-    except Exception as e:
-        raise RuntimeError(f"Model loading failed: {str(e)}. Ensure internet connection and update ultralytics/torch.")
+
 
 def preprocess_image(image: Image.Image) -> tuple:
     """Process uploaded image and return grayscale and RGB versions"""
@@ -129,24 +84,13 @@ def preprocess_image(image: Image.Image) -> tuple:
         raise RuntimeError(f"Image processing failed: {str(e)}")
 
 
-def apply_preprocessing(image: np.ndarray, params: dict) -> np.ndarray:
-    """Apply preprocessing steps to the image"""
-    try:
-        processed = image.copy()
-        if params['gaussian']:
-            processed = cv2.GaussianBlur(processed, 
-                                        (params['gaussian_kernel'], params['gaussian_kernel']), 0)
-        if params['threshold']:
-            processed = cv2.adaptiveThreshold(processed, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                             cv2.THRESH_BINARY, 11, 2)
-        if params['hist_eq']:
-            processed = cv2.equalizeHist(processed)
-        if params['morph']:
-            kernel = np.ones((params['morph_kernel'], params['morph_kernel']), np.uint8)
-            processed = cv2.dilate(processed, kernel, iterations=1)
-        return processed
-    except Exception as e:
-        raise RuntimeError(f"Preprocessing failed: {str(e)}")
+
+
+
+
+
+
+
 
 def apply_edge_detection(method: str, image: np.ndarray, params: dict) -> np.ndarray:
     """Apply selected edge detection algorithm"""
@@ -341,9 +285,7 @@ def main():
         st.error(f"Processing error: {str(e)}")
         st.stop()
 
-    # ======================
-    # RESULTS DISPLAY
-    # ======================
+
     with st.container():
         st.subheader("Processing Results")
         
